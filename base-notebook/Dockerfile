@@ -7,8 +7,7 @@ ARG ROOT_CONTAINER=ubuntu:focal
 
 FROM $ROOT_CONTAINER
 
-LABEL maintainer="Jupyter Project <jupyter@googlegroups.com>"
-ARG NB_USER="jovyan"
+ARG NB_USER="dbstalk"
 ARG NB_UID="1000"
 ARG NB_GID="100"
 
@@ -34,6 +33,7 @@ RUN apt-get update --yes && \
     # - pandoc is used to convert notebooks to html files
     #   it's not present in arm64 ubuntu image, so we install it here
     pandoc \
+    git \
     # - run-one - a wrapper script that runs no more
     #   than one unique  instance  of  some  command with a unique set of arguments,
     #   we use `run-one-constantly` to support `RESTARTABLE` option
@@ -88,7 +88,7 @@ USER ${NB_UID}
 ARG PYTHON_VERSION=3.10
 
 # Setup work directory for backward-compatibility
-RUN mkdir "/home/${NB_USER}/work" && \
+RUN mkdir "/home/${NB_USER}/project" && \
     fix-permissions "/home/${NB_USER}"
 
 # Download and install Micromamba, and initialize Conda prefix.
@@ -153,10 +153,18 @@ CMD ["start-notebook.sh"]
 COPY start.sh start-notebook.sh start-singleuser.sh /usr/local/bin/
 # Currently need to have both jupyter_notebook_config and jupyter_server_config to support classic and lab
 COPY jupyter_server_config.py /etc/jupyter/
+     
+# add jupyterlab theme
+RUN pip install databeanstalk-theme && \
+    pip install awscli && \
+    pip install jupyterlab-link-share && \
+    mkdir -p ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/ && echo '{ "theme":"DatabeanStalk UI Dark" }' > ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings && \
+    mkdir -p ~/.jupyter/lab/user-settings/@jupyterlab/extensionmanager-extension/ && echo '{ "enabled": false }' > ~/.jupyter/lab/user-settings/@jupyterlab/extensionmanager-extension/plugin.jupyterlab-settings && \
+    jupyter labextension install jupyterlab-plotly && \
+    pip install --upgrade jupyterlab jupyterlab-git && jupyter lab build
 
 # Fix permissions on /etc/jupyter as root
 USER root
-
 # Legacy for Jupyter Notebook Server, see: [#1205](https://github.com/jupyter/docker-stacks/issues/1205)
 RUN sed -re "s/c.ServerApp/c.NotebookApp/g" \
     /etc/jupyter/jupyter_server_config.py > /etc/jupyter/jupyter_notebook_config.py && \
